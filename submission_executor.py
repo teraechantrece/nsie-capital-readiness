@@ -350,7 +350,7 @@ async def execute(packet: dict[str, Any], envelope: dict[str, Any],
     async with async_playwright() as browser_driver:
         browser = await browser_driver.chromium.launch(headless=True)
         context = await browser.new_context(
-            storage_state=str(session_state), accept_downloads=False)
+            storage_state=str(session_state), accept_downloads=False,\n            service_workers="block")
         async def restrict_outbound(route):
             try:
                 check_host(route.request.url, packet["portal_host"])
