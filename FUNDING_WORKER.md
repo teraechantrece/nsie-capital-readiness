@@ -1,49 +1,57 @@
-# NSIE Funding Worker — governed pre-application component
+# NSIE Funding Worker — research and application preparation
 
-**Status: prototype, NOT deployed.** This is a read-only funding screener and registry adapter, not a fully autonomous browser agent. It is an additive component for the existing NSIE architecture, not a new data store.
+**Status: draft prototype; not deployed or connected to any lender.**
 
-## What it does
-- Queries OpenSOSData's `POST /v1/lookup` on explicit invocation with the API key stored as a runtime secret.
-- Separates name-match evidence from **current beneficial ownership**, which is never inferred from public registry entries or an IRS EIN notice.
-- Screens opportunities against user policy (e.g., no SBA), published thresholds, geographic restrictions, reimbursement rules, and emergency disbursement timing.
-- Produces structured JSON ready for ingestion by NSIE's **existing event bus/PostgreSQL evidence store**. It does NOT independently persist case data.
-- Prepares a controlled handoff. It cannot authorize credit checks, send bank or identity records, certify lender applications, click Submit, or commit fees.
+This is an additive component of NSIE's existing capital-readiness architecture. No applicant records or additional databases are created in this GitHub repository.
 
-## Local verification
-```bash
-python -m unittest test_funding_worker.py -v
-python funding_worker.py --case /private/case.json --opportunities /private/opportunities.json
-```
+## Current components
 
-An optional *paid* registry lookup is performed only if `--verify-registry` is included and `OPENSOSDATA_API_KEY` is configured securely in the runtime.
+- funding_worker.py: OpenSOSData entity lookup, evidence controls, lender screening, redacted application handoff
+- funding_discovery.py: official Simpler.Grants.gov grant search (requires API key; NOT an application submission API)
+- funding_sources_virginia.json: public, non-SBA leads for Virginia rural business funding research
+- refresh_public_sources.py: official-source webpage freshness checks, hashes, timestamps and page titles (no applicant information)
+- portal_form_draft.py: allowlisted Playwright browser autofill of verified non-sensitive fields, with explicit portal data-disclosure authorization; does NOT submit
+- .github/workflows/funding-worker.yml: pull-request unit tests; optional weekday checks of *public* source pages after the branch is merged
+- test_funding_worker.py and test_funding_integration.py: safety and discovery tests
 
-## Operating contract
-1. Public-record research is the agent's responsibility. Never ask the applicant for public record facts before attempting a source search.
-2. Keep private financial documents and legal identity fields out of Git and out of logs. The business-name example in documentation must remain fictional.
-3. Government record or other authoritative primary-source links, fetch date, document/version, and evidence status accompany every field.
-4. An ambiguous legal-name match, missing source URL, non-current lender criteria, incomplete cash-flow evidence, or ownership unknown must trigger a review gate.
-5. Never represent proposed prices, modelled revenue, or a reported credit score as verified operational data.
-6. Use the applicant's explicit exclusions (including no SBA financing) as hard blocks; avoid hard credit pulls or paid applications without specific owner authorization.
-7. This worker does not browse grant portals, upload confidential documents, or submit forms. The future browser connector (e.g., TinyFish in ChatGPT Work or another authorized browser runtime) must implement those interactions behind the approval gate.
-8. Do not claim a program is accepting applications, will approve credit, or will fund within 7 days without checked official evidence.
+## Commands for the authorized NSIE runtime
 
-## Input shapes (illustrative, not a live applicant)
-Case JSON:
-```json
-{"case_id":"case-demo","legal_name":"Example Tea Cafe LLC","state":"VA","exclude_sba":true,"reported_credit_range":[560,619],"requested_amount":15000,"funding_needed_within_days":7,"needs_upfront_cash":true,"cashflow_verified":false,"fields":{},"required_application_fields":["legal_name","physical_address","annual_revenue"]}
-```
-Opportunity JSON:
-```json
-[{"name":"Example Regional Working Capital Program","official_url":"https://example.org/loans","terms_checked_at":null,"states":["VA"],"sba_backed":false,"minimum_credit_score":null,"reimbursement_only":false,"published_disbursement_days":null}]
-```
+    python -m unittest discover -v -p 'test_*.py'
+    python refresh_public_sources.py --sources funding_sources_virginia.json
+    python funding_worker.py --case /secure/private_case.json --opportunities /secure/programs.json
 
-## Next integration work (not yet implemented)
-- Scheduled official funding-source discovery and freshness checks
-- OpenSOSData async job polling, and direct Virginia SCC evidence cross-check
-- OCR/document extraction and reconciliation from authorized sources
-- Human-reviewed browser form filling with upload receipt and application-state tracking
-- Event-bus/PostgreSQL binding, deployment secrets, rate/cost controls, and full end-to-end tests
+Add --verify-registry to the last command only after the user authorizes use of a paid lookup and the runtime has OPENSOSDATA_API_KEY as a protected secret. The official single-lookup endpoint accepts entity_name and state. Queued result polling and direct state-file reconciliation are follow-up integrations.
 
-**Do not upload user documents or API keys to this repository.**
+    python funding_discovery.py --query "rural small business"
 
-Official integration documentation: https://api.opensosdata.com/docs/
+This requires SIMPLER_GRANTS_API_KEY in protected environment configuration. Its output consists of candidate funding opportunities; eligibility, current deadline and actual application status still require independent source verification. SBA sources are excluded by default for this case.
+
+    python portal_form_draft.py --case /secure/private_case.json --portal /secure/approved_portal.json --approve-disclosure
+
+This last command requires Playwright and Chromium in a trusted browser runtime. The portal configuration specifies an exact HTTPS host allowlist and label-to-verified-field mapping. Approval applies to disclosure of the *specific mapped fields to that portal*. Filling an input can already transmit its value through autosave: the workflow must not fill external forms before approval. Protected owner identifiers, consents, signatures, fees, and certifications are blocked. It never clicks Submit or saves lender drafts. Ephemeral session content is not guaranteed to persist.
+
+## NSIE funding process
+
+DISCOVER -> VERIFY -> SCREEN -> PREPARE -> APPROVAL -> SUBMIT -> TRACK
+
+1. Discover: refresh sources, find published programs and record provenance; do not confuse grants for expansions with emergency operating cash.
+2. Verify: check Secretary of State data, IRS evidence, addresses and identity matches. Registry matches do not independently prove who currently owns an LLC.
+3. Screen: hard-exclude explicit no-SBA, impossible published minimums and reimbursement-only grants for immediate needs. Flag typical benchmarks rather than treating them as absolute rules.
+4. Prepare: draft truthful lender narratives and budgets from verified financial documents, not projections presented as historical revenue.
+5. Approval: specific authorization for credit checks, payments, disclosures, certifications and final submissions.
+6. Submit/Track: **not implemented**. Must use an authorized persistent browser runtime and store confirmed receipts in existing NSIE PostgreSQL and audit/event systems.
+
+## Outstanding implementation gates
+
+- OpenSOSData and Simpler.Grants.gov secrets not connected; no paid registry lookup performed.
+- Official Virginia SCC entity record not automatically reconciled yet.
+- Authenticated browser sessions, private document uploads, final submission and receipt capture are not implemented.
+- Existing NSIE event-bus/PostgreSQL binding and operational deployment have not been verified.
+- GitHub Actions test workflow has been added but its successful run has not yet been observed.
+
+No real applicant EIN, credit reports, owner IDs, account numbers, credentials, bank statements or private case payloads may be committed to GitHub. The public-source refresh contains only non-sensitive metadata.
+
+Official references:
+- https://api.opensosdata.com/docs/
+- https://simpler.grants.gov/developers
+- https://playwright.dev/python/docs/intro
