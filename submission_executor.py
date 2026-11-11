@@ -229,3 +229,160 @@ class AuditLedger:
                                  "application_id": packet["application_id"],
                                  "approval_id": approval["approval_id"],
                                  "receipt_sha256": receipt_sha256}, previous)
+
+
+def secure_receipt(root: Path, packet: dict[str, Any], confirmation: str,
+                   page_url: str, confirmation_text: str,
+                   screenshot_sha256: str | None = None) -> tuple[str, str]:
+    check_host(page_url, packet["portal_host"])
+    parts = urlsplit(page_url)
+    sanitized_url = f"{parts.scheme}://{parts.hostname}{parts.path}"
+    record = {
+        "state": "SUBMISSION_CONFIRMED", "at": iso_now(),
+        "application_id": packet["application_id"],
+        "program": packet["program"], "portal": sanitized_url,
+        "intent_sha256": digest(packet), "confirmation_id": confirmation,
+        "confirmation_page_sha256": text_digest(confirmation_text),
+        "screenshot_sha256": screenshot_sha256,
+        "notes": "Submission receipt only; approval/award not implied",
+    }
+    root = safe_private_root(root)
+    output = root / f'receipt_{packet["application_id"]}.json'
+    fd = os.open(str(output), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(canon(record).decode() + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        output.unlink(missing_ok=True)
+        raise
+    return str(output), digest(record)
+
+
+async def submit_on_review_page(page: Any, packet: dict[str, Any],
+                                ledger: AuditLedger, approval: dict[str, Any]) -> dict[str, Any]:
+    """Exactly one click from a verified pre-filled, authenticated review page.
+
+    Do not retry an uncertain submission. This only supports vetted portals
+    with an exact stable review summary and a receipt-number confirmation.
+    """
+    validate_packet(packet)
+    check_host(page.url, packet["portal_host"])
+    if page.url != packet["portal_url"]:
+        raise ValueError("Review page URL differs from signed approval")
+    review = page.locator(packet["review_selector"])
+    if await review.count() != 1:
+        raise ValueError("Review summary selector not unique")
+    summary = await review.inner_text()
+    if text_digest(summary) != packet["review_sha256"]:
+        raise ValueError("Displayed terms differ from the approved version")
+    button = page.get_by_role("button", name=packet["submit_button_name"], exact=True)
+    if await button.count() != 1:
+        raise ValueError("Final Submit button ambiguous")
+
+    # Persistent reservation precedes the irreversible click.
+    ledger.reserve(packet, approval)
+    try:
+        await button.click(timeout=15000)
+        check_host(page.url, packet["portal_host"])
+        receipt = page.locator(packet["confirmation_selector"])
+        await receipt.wait_for(state="visible", timeout=15000)
+        if await receipt.count() != 1:
+            raise ValueError("Confirmation selector not unique")
+        confirmation_text = await receipt.inner_text()
+        if packet["confirmation_phrase"] not in confirmation_text:
+            raise ValueError("Confirmation phrase not observed")
+        match = re.search(packet["confirmation_id_regex"], confirmation_text)
+        if not match:
+            raise ValueError("No matching confirmation number")
+        confirmation_id = match.group(1).strip()
+        if not re.fullmatch(r"[A-Za-z0-9-]{6,100}", confirmation_id):
+            raise ValueError("Unexpected confirmation ID format")
+
+        screenshot_hash = None
+        if packet["receipt_screenshot"]:
+            # Screenshot may contain PII; store ONLY inside approved encrypted
+            # private runtime with exclusive file permissions, never in CI logs.
+            screenshot = await page.screenshot(full_page=False)
+            if not screenshot or len(screenshot) > 12_000_000:
+                raise ValueError("Screenshot missing or oversized")
+            screenshot_hash = hashlib.sha256(screenshot).hexdigest()
+            shot_path = ledger.root / f'receipt_{packet["application_id"]}.png'
+            fd = os.open(str(shot_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(screenshot)
+                stream.flush()
+                os.fsync(stream.fileno())
+
+        path, receipt_hash = secure_receipt(
+            ledger.root, packet, confirmation_id, page.url, confirmation_text, screenshot_hash)
+        ledger.conclude(packet, approval, "SUBMISSION_CONFIRMED", receipt_hash)
+        return {
+            "state": "SUBMISSION_CONFIRMED",
+            "application_id": packet["application_id"], "receipt_file": path,
+            "receipt_sha256": receipt_hash, "requires_owner_followup": False,
+        }
+    except Exception as exc:
+        # Click may have succeeded remotely. Record uncertainty; never retry.
+        ledger.conclude(packet, approval, "SUBMISSION_UNCERTAIN")
+        return {
+            "state": "SUBMISSION_UNCERTAIN", "application_id": packet["application_id"],
+            "reason": f"Portal response not confirmed ({type(exc).__name__})",
+            "requires_owner_followup": True, "automatic_retry_allowed": False,
+        }
+
+
+async def execute(packet: dict[str, Any], envelope: dict[str, Any],
+                  root: Path, public_key_b64: str,
+                  session_state: Path) -> dict[str, Any]:
+    approval = verify_approval(packet, envelope, public_key_b64)
+    ledger = AuditLedger(root)
+    if (session_state.is_symlink() or not session_state.is_file()
+            or session_state.stat().st_mode & 0o077):
+        raise ValueError("Protected authenticated browser session (0600) required")
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError as exc:
+        raise ValueError("Playwright is not installed") from exc
+
+    async with async_playwright() as browser_driver:
+        browser = await browser_driver.chromium.launch(headless=True)
+        context = await browser.new_context(
+            storage_state=str(session_state), accept_downloads=False)
+        page = await context.new_page()
+        try:
+            await page.goto(packet["portal_url"], wait_until="domcontentloaded", timeout=20000)
+            return await submit_on_review_page(page, packet, ledger, approval)
+        finally:
+            await context.close()
+            await browser.close()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="NSIE one-time approved submission")
+    parser.add_argument("--packet", required=True, type=Path)
+    parser.add_argument("--approval", required=True, type=Path)
+    parser.add_argument("--private-root", required=True, type=Path)
+    parser.add_argument("--session-state", required=True, type=Path)
+    parser.add_argument("--execute-approved-submission", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.execute_approved_submission:
+        print(json.dumps({"state": "BLOCKED", "reason": "Executor action not enabled"}))
+        return 2
+    try:
+        output = asyncio.run(execute(
+            json.loads(args.packet.read_text(encoding="utf-8")),
+            json.loads(args.approval.read_text(encoding="utf-8")),
+            args.private_root,
+            os.environ.get("NSIE_APPROVAL_PUBLIC_KEY_B64", ""),
+            args.session_state,
+        ))
+    except Exception as exc:
+        output = {"state": "BLOCKED", "reason": f"Failed closed ({type(exc).__name__})"}
+    print(json.dumps(output))  # Never prints confirmation number or financial values.
+    return 0 if output["state"] == "SUBMISSION_CONFIRMED" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
