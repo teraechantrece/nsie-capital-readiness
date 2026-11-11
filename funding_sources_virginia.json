@@ -1,0 +1,68 @@
+{
+  "case_focus": "rural Virginia small-business working capital; no SBA",
+  "notice": "Research leads only. Links are not approvals, eligibility findings, or promises of availability.",
+  "sources": [
+    {
+      "id": "sercap-small-business",
+      "name": "SERCAP Small Business Loan Product",
+      "type": "CDFI working capital",
+      "url": "https://www.sercap.org/index.php/assistance/small-businesses/small-business-loan-product",
+      "priority": "urgent_research",
+      "questions": [
+        "Collateral and personal guaranty requirements",
+        "SBDC pathway for new businesses",
+        "Fees and credit pull authorization",
+        "True time to funding"
+      ]
+    },
+    {
+      "id": "southside-econdev",
+      "name": "Southside Planning District Economic Development",
+      "type": "regional revolving funding",
+      "url": "https://www.southsidepdc.org/services/economic-development",
+      "priority": "urgent_research",
+      "questions": [
+        "Current administrator and application status",
+        "Coverage for Boydton",
+        "Working capital permitted",
+        "Average decision timeline"
+      ]
+    },
+    {
+      "id": "virginia-sbdc",
+      "name": "Virginia SBDC Capital Pathways",
+      "type": "free technical assistance",
+      "url": "https://www.virginiasbdc.org/programs/capital-pathways/",
+      "priority": "urgent_research",
+      "questions": [
+        "Current advising availability",
+        "Pathway relevant to SERCAP",
+        "Business financial reconstruction support"
+      ]
+    },
+    {
+      "id": "pnc-loc",
+      "name": "PNC Unsecured Business Line of Credit",
+      "type": "conventional lending / weak initial fit",
+      "url": "https://www.pnc.com/en/small-business/borrowing/business-lines-of-credit/unsecured-business-line-of-credit.html",
+      "priority": "later_or_prequalification_only",
+      "questions": [
+        "Typical personal-credit and time-in-business guidance",
+        "Does current 2026 product have exceptions",
+        "Hard-pull policy and required documents"
+      ]
+    },
+    {
+      "id": "mecklenburg-tourism",
+      "name": "Mecklenburg Tourism Marketing Support Grant",
+      "type": "conditional marketing reimbursement",
+      "url": "https://investinmeckva.com/tourism-marketing-support-grant/",
+      "priority": "non_emergency",
+      "questions": [
+        "Open deadline",
+        "Eligible tourism spending",
+        "Reimbursement and match requirements"
+      ]
+    }
+  ]
+}
