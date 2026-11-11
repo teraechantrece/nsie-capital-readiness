@@ -24,6 +24,14 @@ class FundingWorkerTests(unittest.TestCase):
         output = screen_opportunity({"state": "VA", "needs_upfront_cash": True}, {"name": "Match", "reimbursement_only": True})
         self.assertEqual(output["state"], "EXCLUDE")
 
+    def test_typical_lender_benchmarks_request_more_research(self):
+        case = {"state": "VA", "reported_credit_range": [560, 619], "reported_business_age_months": 6}
+        opp = {"name": "Conventional line of credit", "typical_credit_score": 660, "typical_business_age_months": 24,
+               "official_url": "https://example.org/product", "terms_checked_at": "2026-11-11"}
+        result = screen_opportunity(case, opp)
+        self.assertEqual(result["state"], "RESEARCH_REQUIRED")
+        self.assertIn("Reported time in business below typical lender benchmark", result["unknowns"])
+
     def test_missing_timeline_is_not_promised(self):
         output = screen_opportunity({"state": "VA", "funding_needed_within_days": 7}, {"name": "Fund", "official_url": "https://example.org", "terms_checked_at": "2026-11-11"})
         self.assertEqual(output["state"], "RESEARCH_REQUIRED")
