@@ -1,0 +1,43 @@
+name: Funding worker safety and public research
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 09:17 EST / 10:17 EDT weekdays; runs only from default branch after merge.
+    - cron: '17 14 * * 1-5'
+
+permissions:
+  contents: read
+
+jobs:
+  unit_tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax compile
+        run: python -m compileall -q funding_worker.py funding_discovery.py portal_form_draft.py refresh_public_sources.py
+      - name: Run local safety and discovery tests
+        run: python -m unittest discover -v -p 'test_*.py'
+
+  public_source_snapshot:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch public program page metadata (no applicant PII)
+        run: python refresh_public_sources.py --sources funding_sources_virginia.json --limit 5 > source_snapshot.json
+      - name: Upload non-sensitive source status
+        uses: actions/upload-artifact@v4
+        with:
+          name: funding-public-source-snapshot
+          path: source_snapshot.json
+          retention-days: 7
