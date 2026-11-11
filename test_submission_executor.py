@@ -169,14 +169,14 @@ class SubmissionTests(unittest.TestCase):
         second_page = SimulatedPage(self.packet)
         with self.assertRaisesRegex(ValueError, "already attempted"):
             asyncio.run(submit_on_review_page(second_page, self.packet,
-                                              self.ledger, self.approval))
+                                              self.ledger, self.envelope, self.public_key))
         self.assertEqual(second_page.clicks, 0)
 
     def test_uncertain_state_never_retries(self):
         page = SimulatedPage(self.packet)
         page.missing_confirmation = True
         outcome = asyncio.run(submit_on_review_page(page, self.packet,
-                                                     self.ledger, self.approval))
+                                                     self.ledger, self.envelope, self.public_key))
         self.assertEqual(outcome["state"], "SUBMISSION_UNCERTAIN")
         self.assertEqual(page.clicks, 1)
         with self.assertRaises(ValueError):
@@ -194,7 +194,7 @@ class SubmissionTests(unittest.TestCase):
         page = SimulatedPage(self.packet)
         page.redirect = True
         result = asyncio.run(submit_on_review_page(page, self.packet,
-                                                    self.ledger, self.approval))
+                                                    self.ledger, self.envelope, self.public_key))
         self.assertEqual(result["state"], "SUBMISSION_UNCERTAIN")
 
     def test_audit_tamper_prevents_new_click(self):
