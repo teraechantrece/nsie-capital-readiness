@@ -19,8 +19,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install approval-signature verification dependency
+        run: python -m pip install cryptography==46.0.4
       - name: Syntax compile
-        run: python -m compileall -q funding_worker.py funding_discovery.py portal_form_draft.py refresh_public_sources.py
+        run: python -m compileall -q funding_worker.py funding_discovery.py portal_form_draft.py refresh_public_sources.py submission_executor.py
       - name: Run local safety and discovery tests
         run: python -m unittest discover -v -p 'test_*.py'
 
