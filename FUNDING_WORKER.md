@@ -11,6 +11,9 @@ This is an additive component of NSIE's existing capital-readiness architecture.
 - funding_sources_virginia.json: public, non-SBA leads for Virginia rural business funding research
 - refresh_public_sources.py: official-source webpage freshness checks, hashes, timestamps and page titles (no applicant information)
 - portal_form_draft.py: allowlisted Playwright browser autofill of verified non-sensitive fields, with explicit portal data-disclosure authorization; does NOT submit
+- submission_executor.py: separate approval-service signature verification, single-click submission from a fully populated review page, private receipt capture and hash-chained audit (prototype only)
+- SUBMISSION_RUNBOOK.md: security/owner approval service contract, synthetic tests, production deployment gates
+- requirements-funding-submission.txt: pinned optional browser and cryptography dependencies
 - .github/workflows/funding-worker.yml: pull-request unit tests; optional weekday checks of *public* source pages after the branch is merged
 - test_funding_worker.py and test_funding_integration.py: safety and discovery tests
 
@@ -39,15 +42,15 @@ DISCOVER -> VERIFY -> SCREEN -> PREPARE -> APPROVAL -> SUBMIT -> TRACK
 3. Screen: hard-exclude explicit no-SBA, impossible published minimums and reimbursement-only grants for immediate needs. Flag typical benchmarks rather than treating them as absolute rules.
 4. Prepare: draft truthful lender narratives and budgets from verified financial documents, not projections presented as historical revenue.
 5. Approval: specific authorization for credit checks, payments, disclosures, certifications and final submissions.
-6. Submit/Track: **not implemented**. Must use an authorized persistent browser runtime and store confirmed receipts in existing NSIE PostgreSQL and audit/event systems.
+6. Submit/Track: prototype one-click approval-gated submission and receipt extraction **implemented but not deployed**; site-specific authenticated draft persistence, final approval signing service and existing NSIE PostgreSQL/audit integration remain missing.
 
 ## Outstanding implementation gates
 
 - OpenSOSData and Simpler.Grants.gov secrets not connected; no paid registry lookup performed.
 - Official Virginia SCC entity record not automatically reconciled yet.
-- Authenticated browser sessions, private document uploads, final submission and receipt capture are not implemented.
+- Final-click executor and private JSON receipt capture are implemented at prototype level, but no authenticated production browser session, applicant approval signer, portal-specific document uploads, or live grant/lender submission is connected.
 - Existing NSIE event-bus/PostgreSQL binding and operational deployment have not been verified.
-- GitHub Actions test workflow has been added but its successful run has not yet been observed.
+- GitHub Actions tests run on the draft PR; live portal integration and production acceptance tests are not complete.
 
 No real applicant EIN, credit reports, owner IDs, account numbers, credentials, bank statements or private case payloads may be committed to GitHub. The public-source refresh contains only non-sensitive metadata.
 
