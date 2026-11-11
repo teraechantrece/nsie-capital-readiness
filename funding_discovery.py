@@ -22,7 +22,7 @@ def now_utc() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-def query_grants(*, api_key: str, query: str, limit: int = 25, timeout: int = 30) -> dict[str, Any]:
+def query_grants(*, api_key: str, query: str, limit: int = 25, exclude_sba: bool = True, timeout: int = 30) -> dict[str, Any]:
     if not api_key:
         return {"state": "BLOCKED", "reason": "SIMPLER_GRANTS_API_KEY not configured"}
     if not query.strip():
@@ -55,7 +55,7 @@ def query_grants(*, api_key: str, query: str, limit: int = 25, timeout: int = 30
     if not isinstance(records, list):
         return {"state": "REVIEW_REQUIRED", "reason": "Unexpected API response shape", "checked_at": now_utc()}
     return {"state": "DISCOVERY_COMPLETE", "checked_at": now_utc(), "provider": "Simpler.Grants.gov",
-            "search_query": query, "source_endpoint": SEARCH_URL, "candidates": summarize(records)}
+            "search_query": query, "source_endpoint": SEARCH_URL, "candidates": summarize(records, exclude_sba=exclude_sba)}
 
 
 def summarize(records: list[dict[str, Any]], *, exclude_sba: bool = True) -> list[dict[str, Any]]:
@@ -94,10 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=25)
     p.add_argument("--include-sba", action="store_true", help="Only for applicants who permit SBA sources")
     args = p.parse_args(argv)
-    response = query_grants(api_key=os.getenv("SIMPLER_GRANTS_API_KEY", ""), query=args.query, limit=args.limit)
-    # User exclusion must remain a hard gate even if search API returns SBA opportunities.
-    if response.get("state") == "DISCOVERY_COMPLETE" and not args.include_sba:
-        response["candidates"] = [c for c in response["candidates"] if "small business administration" not in c["agency"].lower()]
+    response = query_grants(api_key=os.getenv("SIMPLER_GRANTS_API_KEY", ""), query=args.query, limit=args.limit, exclude_sba=not args.include_sba)
     json.dump(response, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0 if response.get("state") == "DISCOVERY_COMPLETE" else 2
