@@ -351,6 +351,16 @@ async def execute(packet: dict[str, Any], envelope: dict[str, Any],
         browser = await browser_driver.chromium.launch(headless=True)
         context = await browser.new_context(
             storage_state=str(session_state), accept_downloads=False)
+        async def restrict_outbound(route):
+            try:
+                check_host(route.request.url, packet["portal_host"])
+            except ValueError:
+                await route.abort()
+            else:
+                await route.continue_()
+        # Exact approved portal host only, including subresources and redirects.
+        # A portal needing other origins requires separately vetted runtime policy.
+        await context.route("**/*", restrict_outbound)
         page = await context.new_page()
         try:
             await page.goto(packet["portal_url"], wait_until="domcontentloaded", timeout=20000)
