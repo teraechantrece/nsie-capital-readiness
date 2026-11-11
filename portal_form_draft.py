@@ -23,7 +23,7 @@ PRIVATE_FIELDS = {
     "bank_account", "account_number", "routing_number", "password", "credit_score",
     "owner_home_address", "owner_phone", "driver_license",
 }
-DANGEROUS_LABEL = re.compile(r"(?i)\b(submit|certif|authorize|credit check|hard inquiry|agree to|signature|pay fee)\b")
+DANGEROUS_LABEL = re.compile(r"(?i)(submit|certif\w*|authoriz\w*|credit check|hard inquiry|agree|consent|signature|guarantee|pay (?:a |the )?fee)")
 
 
 def validate_portal(spec: dict[str, Any]) -> str:
