@@ -152,7 +152,7 @@ class SubmissionTests(unittest.TestCase):
 
     def test_confirmation_receipt_and_audit(self):
         page = SimulatedPage(self.packet)
-        result = asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.approval))
+        result = asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.envelope, self.public_key))
         self.assertEqual(result["state"], "SUBMISSION_CONFIRMED")
         self.assertEqual(page.clicks, 1)
         receipt = json.loads(Path(result["receipt_file"]).read_text())
@@ -165,7 +165,7 @@ class SubmissionTests(unittest.TestCase):
 
     def test_one_click_no_replay(self):
         asyncio.run(submit_on_review_page(SimulatedPage(self.packet),
-                                          self.packet, self.ledger, self.approval))
+                                          self.packet, self.ledger, self.envelope, self.public_key))
         second_page = SimulatedPage(self.packet)
         with self.assertRaisesRegex(ValueError, "already attempted"):
             asyncio.run(submit_on_review_page(second_page, self.packet,
@@ -181,13 +181,13 @@ class SubmissionTests(unittest.TestCase):
         self.assertEqual(page.clicks, 1)
         with self.assertRaises(ValueError):
             asyncio.run(submit_on_review_page(SimulatedPage(self.packet),
-                                              self.packet, self.ledger, self.approval))
+                                              self.packet, self.ledger, self.envelope, self.public_key))
 
     def test_review_modified_blocks_before_click(self):
         page = SimulatedPage(self.packet)
         page.review = "Changed terms $30000"
         with self.assertRaisesRegex(ValueError, "differ"):
-            asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.approval))
+            asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.envelope, self.public_key))
         self.assertEqual(page.clicks, 0)
 
     def test_external_redirect_is_uncertain(self):
@@ -211,8 +211,9 @@ class SubmissionTests(unittest.TestCase):
 
     def test_opt_in_private_screenshot(self):
         self.packet["receipt_screenshot"] = True
+        self.envelope = signed(self.packet, self.private_key)
         page = SimulatedPage(self.packet)
-        result = asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.approval))
+        result = asyncio.run(submit_on_review_page(page, self.packet, self.ledger, self.envelope, self.public_key))
         self.assertEqual(result["state"], "SUBMISSION_CONFIRMED")
         path = self.root / f'receipt_{self.packet["application_id"]}.png'
         self.assertEqual(path.stat().st_mode & 0o077, 0)
