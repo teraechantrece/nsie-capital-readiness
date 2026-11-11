@@ -28,6 +28,15 @@ class FundingWorkerTests(unittest.TestCase):
         output = screen_opportunity({"state": "VA", "funding_needed_within_days": 7}, {"name": "Fund", "official_url": "https://example.org", "terms_checked_at": "2026-11-11"})
         self.assertEqual(output["state"], "RESEARCH_REQUIRED")
 
+    def test_sensitive_evidence_not_echoed(self):
+        case = {"case_id": "demo", "cashflow_verified": True, "fields": {
+            "tax_id": {"value": "private-value", "evidence_status": "verified", "source_ref": "private-ref"},
+            "legal_name": {"value": "Example LLC", "evidence_status": "verified", "source_ref": "public-ref"}
+        }, "required_application_fields": ["legal_name", "tax_id"]}
+        output = prepare_handoff(case, [], {"state": "ENTITY_NAME_MATCH"})
+        self.assertNotIn("tax_id", output["verified_public_fields"])
+        self.assertEqual(output["verified_public_fields"]["legal_name"], "Example LLC")
+
     def test_not_submit_without_verified_case(self):
         case = {"case_id": "example", "fields": {"name": {"value": "Example", "evidence_status": "self_reported"}}, "required_application_fields": ["name", "revenue"]}
         handoff = prepare_handoff(case, [], {"state": "NOT_CHECKED"})
