@@ -261,13 +261,14 @@ def secure_receipt(root: Path, packet: dict[str, Any], confirmation: str,
 
 
 async def submit_on_review_page(page: Any, packet: dict[str, Any],
-                                ledger: AuditLedger, approval: dict[str, Any]) -> dict[str, Any]:
+                                ledger: AuditLedger, approval_envelope: dict[str, Any],
+                                public_key_b64: str) -> dict[str, Any]:
     """Exactly one click from a verified pre-filled, authenticated review page.
 
     Do not retry an uncertain submission. This only supports vetted portals
     with an exact stable review summary and a receipt-number confirmation.
     """
-    validate_packet(packet)
+    approval = verify_approval(packet, approval_envelope, public_key_b64)
     check_host(page.url, packet["portal_host"])
     if page.url != packet["portal_url"]:
         raise ValueError("Review page URL differs from signed approval")
@@ -336,7 +337,7 @@ async def submit_on_review_page(page: Any, packet: dict[str, Any],
 async def execute(packet: dict[str, Any], envelope: dict[str, Any],
                   root: Path, public_key_b64: str,
                   session_state: Path) -> dict[str, Any]:
-    approval = verify_approval(packet, envelope, public_key_b64)
+    verify_approval(packet, envelope, public_key_b64)
     ledger = AuditLedger(root)
     if (session_state.is_symlink() or not session_state.is_file()
             or session_state.stat().st_mode & 0o077):
@@ -353,7 +354,7 @@ async def execute(packet: dict[str, Any], envelope: dict[str, Any],
         page = await context.new_page()
         try:
             await page.goto(packet["portal_url"], wait_until="domcontentloaded", timeout=20000)
-            return await submit_on_review_page(page, packet, ledger, approval)
+            return await submit_on_review_page(page, packet, ledger, envelope, public_key_b64)
         finally:
             await context.close()
             await browser.close()
