@@ -133,8 +133,10 @@ def screen_opportunity(case: dict[str, Any], opp: dict[str, Any]) -> dict[str, A
 
 def prepare_handoff(case: dict[str, Any], screens: list[dict[str, Any]], registry: dict[str, Any]) -> dict[str, Any]:
     evidence = case.get("fields", {})
-    verified = {k: v["value"] for k, v in evidence.items() if evidence_is_valid(v)}
-    missing = sorted(set(case.get("required_application_fields", [])) - verified.keys())
+    verified_keys = {k for k, v in evidence.items() if evidence_is_valid(v)}
+    public_field_names = {"legal_name", "trade_name", "physical_address", "business_city", "business_state", "business_website", "business_phone", "naics_code"}
+    verified = {k: evidence[k]["value"] for k in verified_keys if k in public_field_names}
+    missing = sorted(set(case.get("required_application_fields", [])) - verified_keys)
     legal_match = registry.get("state") == "ENTITY_NAME_MATCH"
     blocks = []
     if not legal_match:
