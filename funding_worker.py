@@ -38,7 +38,7 @@ def registry_result(payload: dict[str, Any], expected_name: str) -> dict[str, An
         "state": "ENTITY_NAME_MATCH" if name_match else "REVIEW_REQUIRED",
         "verified_through": "OpenSOSData live state-portal lookup (provider-reported)",
         "checked_at": timestamp(),
-        "reported_source": payload.get("source", "not provided"),
+        "reported_source": payload.get("data_source") or payload.get("source", "not provided"),
         "stale": payload.get("stale"),
         "entity_name": returned_name,
         "entity_id": data.get("entityId"),
@@ -57,7 +57,7 @@ def lookup_registry(name: str, state: str, api_key: str, *, timeout: int = 45) -
         return {"state": "BLOCKED", "reason": "OPENSOSDATA_API_KEY is not configured"}
     if not re.fullmatch("[A-Z]{2}", state.upper()):
         return {"state": "BLOCKED", "reason": "State must be a two-letter code"}
-    body = json.dumps({"entity_name": name, "state": state.upper(), "source": "live"}).encode()
+    body = json.dumps({"entity_name": name, "state": state.upper()}).encode()
     request = urllib.request.Request(
         API_URL, data=body,
         headers={"Content-Type": "application/json", "x-api-key": api_key}, method="POST",
@@ -121,6 +121,14 @@ def screen_opportunity(case: dict[str, Any], opp: dict[str, Any]) -> dict[str, A
         unknowns.append("Funding disbursement timeline not verified")
     if opp.get("reimbursement_only") and case.get("needs_upfront_cash"):
         reasons.append("Reimbursement grant cannot supply immediate cash")
+    typical_credit = opp.get("typical_credit_score")
+    if typical_credit is not None and reported_credit and int(reported_credit[1]) < int(typical_credit):
+        unknowns.append("Reported credit below typical lender benchmark; exceptions not verified")
+    typical_age = opp.get("typical_business_age_months")
+    reported_age = case.get("reported_business_age_months")
+    if typical_age is not None and reported_age is not None and int(reported_age) < int(typical_age):
+        unknowns.append("Reported time in business below typical lender benchmark")
+
     if reasons:
         status = "EXCLUDE"
     elif unknowns:
